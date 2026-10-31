@@ -1,0 +1,40 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build APK with Flet
+        run: flet build apk --include-packages google_api_python_client google_auth_oauthlib
+
+      - name: Upload APK Ready for Download
+        uses: actions/upload-artifact@v4
+        with:
+          name: YouTube-Bot-APK
+          path: build/apk/app-release.apk
