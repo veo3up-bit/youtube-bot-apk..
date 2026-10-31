@@ -1,10 +1,10 @@
 import flet as ft
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+import requests
+import json
+import os
 
 def main(page: ft.Page):
-    page.title = "YouTube Bot"
+    page.title = "YouTube Bot Manager"
     page.theme_mode = ft.ThemeMode.DARK
     page.scroll = ft.ScrollMode.AUTO
     page.padding = 20
@@ -16,7 +16,7 @@ def main(page: ft.Page):
         label="Access Token",
         password=True,
         can_reveal_password=True,
-        hint_text="Paste your YouTube Token here"
+        hint_text="Paste your YouTube Access Token here"
     )
     title_input = ft.TextField(label="Video Title")
     desc_input = ft.TextField(label="Video Description", multiline=True, min_lines=3)
@@ -40,55 +40,100 @@ def main(page: ft.Page):
     file_picker = ft.FilePicker(on_result=on_file_picked)
     page.overlay.append(file_picker)
 
-    def get_youtube_service():
-        if not access_token_input.value:
-            status_log.value = "Error: Enter Access Token first!"
+    def upload_video_action(e):
+        token = access_token_input.value.strip()
+        file_path = selected_file_path.value
+        if not token or file_path == "No video selected":
+            status_log.value = "Error: Enter Access Token and select a video!"
             status_log.color = ft.colors.RED_400
             page.update()
-            return None
-        creds = Credentials(token=access_token_input.value)
-        return build('youtube', 'v3', credentials=creds)
-
-    def upload_video_action(e):
-        youtube = get_youtube_service()
-        if not youtube or selected_file_path.value == "No video selected":
             return
+
         try:
-            status_log.value = "Uploading... Please wait."
+            status_log.value = "Uploading video... Please wait."
+            status_log.color = ft.colors.YELLOW_400
             page.update()
-            body = {
-                'snippet': {
-                    'title': title_input.value or "New Video",
-                    'description': desc_input.value or "",
-                    'categoryId': "20"
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+            }
+            metadata = {
+                "snippet": {
+                    "title": title_input.value or "New Video",
+                    "description": desc_input.value or "",
+                    "categoryId": "20"
                 },
-                'status': {
-                    'privacyStatus': privacy_dropdown.value,
-                    'selfDeclaredMadeForKids': False
+                "status": {
+                    "privacyStatus": privacy_dropdown.value,
+                    "selfDeclaredMadeForKids": False
                 }
             }
-            media = MediaFileUpload(selected_file_path.value, chunksize=-1, resumable=True)
-            response = youtube.videos().insert(part="snippet,status", body=body, media_body=media).execute()
-            status_log.value = f"Uploaded! ID: {response['id']}"
-            status_log.color = ft.colors.GREEN_400
+
+            with open(file_path, "rb") as video_file:
+                files = {
+                    "data": ("metadata", json.dumps(metadata), "application/json; charset=UTF-8"),
+                    "file": (os.path.basename(file_path), video_file, "application/octet-stream")
+                }
+                url = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status"
+                response = requests.post(url, headers=headers, files=files)
+
+            if response.status_code == 200:
+                vid_id = response.json().get("id")
+                status_log.value = f"Success! Uploaded Video ID: {vid_id}"
+                status_log.color = ft.colors.GREEN_400
+            else:
+                status_log.value = f"API Error: {response.text}"
+                status_log.color = ft.colors.RED_400
         except Exception as ex:
             status_log.value = f"Error: {str(ex)}"
             status_log.color = ft.colors.RED_400
         page.update()
 
     def reply_comments_action(e):
-        youtube = get_youtube_service()
-        if not youtube or not video_id_input.value:
+        token = access_token_input.value.strip()
+        vid_id = video_id_input.value.strip()
+        reply_msg = reply_text_input.value.strip()
+
+        if not token or not vid_id or not reply_msg:
+            status_log.value = "Error: Fill Token, Video ID, and Reply message!"
+            status_log.color = ft.colors.RED_400
+            page.update()
             return
+
         try:
-            response = youtube.commentThreads().list(part="snippet", videoId=video_id_input.value, maxResults=10).execute()
+            status_log.value = "Checking comments..."
+            page.update()
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            list_url = f"https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId={vid_id}&maxResults=10"
+            res = requests.get(list_url, headers=headers)
+
+            if res.status_code != 200:
+                status_log.value = f"Error fetching comments: {res.text}"
+                status_log.color = ft.colors.RED_400
+                page.update()
+                return
+
+            items = res.json().get("items", [])
             count = 0
-            for item in response.get('items', []):
-                if item['snippet']['totalReplyCount'] == 0:
-                    reply_body = {'snippet': {'parentId': item['id'], 'textOriginal': reply_text_input.value}}
-                    youtube.comments().insert(part="snippet", body=reply_body).execute()
-                    count += 1
-            status_log.value = f"Replied to {count} comments!"
+            for item in items:
+                if item["snippet"]["totalReplyCount"] == 0:
+                    parent_id = item["id"]
+                    reply_body = {
+                        "snippet": {
+                            "parentId": parent_id,
+                            "textOriginal": reply_msg
+                        }
+                    }
+                    post_url = "https://www.googleapis.com/youtube/v3/comments?part=snippet"
+                    r = requests.post(post_url, headers=headers, json=reply_body)
+                    if r.status_code == 200:
+                        count += 1
+
+            status_log.value = f"Success! Replied to {count} comments."
             status_log.color = ft.colors.GREEN_400
         except Exception as ex:
             status_log.value = f"Error: {str(ex)}"
