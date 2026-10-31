@@ -9,8 +9,8 @@ def main(page: ft.Page):
     page.scroll = ft.ScrollMode.AUTO
     page.padding = 20
 
-    selected_file_path = ft.Text(value="No video selected", color=ft.colors.GREY_400)
-    status_log = ft.Text(value="Status: Ready", color=ft.colors.GREEN_400)
+    selected_file_path = ft.Text(value="No video selected")
+    status_log = ft.Text(value="Status: Ready")
 
     access_token_input = ft.TextField(
         label="Access Token",
@@ -45,13 +45,11 @@ def main(page: ft.Page):
         file_path = selected_file_path.value
         if not token or file_path == "No video selected":
             status_log.value = "Error: Enter Access Token and select a video!"
-            status_log.color = ft.colors.RED_400
             page.update()
             return
 
         try:
             status_log.value = "Uploading video... Please wait."
-            status_log.color = ft.colors.YELLOW_400
             page.update()
 
             headers = {
@@ -80,13 +78,10 @@ def main(page: ft.Page):
             if response.status_code == 200:
                 vid_id = response.json().get("id")
                 status_log.value = f"Success! Uploaded Video ID: {vid_id}"
-                status_log.color = ft.colors.GREEN_400
             else:
                 status_log.value = f"API Error: {response.text}"
-                status_log.color = ft.colors.RED_400
         except Exception as ex:
             status_log.value = f"Error: {str(ex)}"
-            status_log.color = ft.colors.RED_400
         page.update()
 
     def reply_comments_action(e):
@@ -96,7 +91,6 @@ def main(page: ft.Page):
 
         if not token or not vid_id or not reply_msg:
             status_log.value = "Error: Fill Token, Video ID, and Reply message!"
-            status_log.color = ft.colors.RED_400
             page.update()
             return
 
@@ -113,7 +107,6 @@ def main(page: ft.Page):
 
             if res.status_code != 200:
                 status_log.value = f"Error fetching comments: {res.text}"
-                status_log.color = ft.colors.RED_400
                 page.update()
                 return
 
@@ -134,10 +127,8 @@ def main(page: ft.Page):
                         count += 1
 
             status_log.value = f"Success! Replied to {count} comments."
-            status_log.color = ft.colors.GREEN_400
         except Exception as ex:
             status_log.value = f"Error: {str(ex)}"
-            status_log.color = ft.colors.RED_400
         page.update()
 
     page.add(
