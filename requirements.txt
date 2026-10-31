@@ -1,3 +1,2 @@
-flet==0.23.2
-google-api-python-client
-google-auth-oauthlib
+flet==0.24.1
+requests
